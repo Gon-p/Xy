@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Galaxy</title>
+  <style>
+    html, body { margin:0; height:100%; background:#000; overflow:hidden; }
+    canvas { position:fixed; inset:0; width:100%; height:100dvh; display:block; touch-action:none; }
+    .ui {
+      position:fixed; left:12px; bottom:12px; display:flex; gap:8px; z-index:10; pointer-events:auto;
+      font-family: system-ui, Arial, sans-serif;
+    }
+    .btn {
+      padding:10px 12px; border-radius:999px; border:1px solid #ffffff33; background:#111111aa; color:#fff;
+      font-size:14px; cursor:pointer; backdrop-filter: blur(6px);
+    }
+    .btn:hover { background:#222222cc; }
+  </style>
+</head>
+<body>
+  <canvas id="galaxy"></canvas>
+  <div class="ui">
+    <button id="music" class="btn">🔊click atu pantalla</button>
+    <button id="auto" class="btn">🛰️ Viaje: OFF</button>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+  import * as THREE from 'three';
+  import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+  // ===== Base =====
+  const canvas = document.getElementById('galaxy');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+  renderer.setPixelRatio(devicePixelRatio);
+  renderer.setSize(innerWidth, innerHeight);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 2000);
+  camera.position.set(0, 25, 65);
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true; controls.dampingFactor = 0.05;
+  controls.minDistance = 10; controls.maxDistance = 200;
+
+  const panLimit = 40;
+
+  // ===== Galaxia con frases =====
+  const galaxy = new THREE.Group(); scene.add(galaxy);
+
+  const phrases = [
+    "Te Amo Muchote.", "Andrea.", "No Te Desanimes.",
+    "Vive, Ama, Ríe.", "Uno Para El Otro.",
+    "La Felicidad Es Un Viaje, No Un Destino.", "Eres Más Fuerte Solo Se Tú.",
+    "La Magia Está En Creer.", "El Futuro Pertenece A Quienes Creen."
+  ];
+
+  function textTexture(text, alpha=0.9){
+    const c = document.createElement('canvas'), ctx = c.getContext('2d');
+    c.width = 1024; c.height = 128;
+    ctx.font = 'bold 48px Arial';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.shadowColor='rgba(255,255,255,0.35)'; ctx.shadowBlur=22;
+    ctx.fillStyle=`rgba(255,255,255,${alpha})`;
+    ctx.fillText(text, c.width/2, c.height/2);
+    return new THREE.CanvasTexture(c);
+  }
+
+  function phraseSprite(text){
+    const tex = textTexture(text, 0.85);
+    const mat = new THREE.SpriteMaterial({ map:tex, transparent:true, opacity:0.85, depthWrite:false });
+    const spr = new THREE.Sprite(mat);
+    spr.scale.set(20, 2.5, 1);
+    spr.isPhrase = true;
+    return spr;
+  }
+
+  const count=160, arms=5, radius=80, maxH=20;
+  const phraseSprites=[];
+  for (let i=0;i<count;i++){
+    const idx = i % phrases.length;
+    const spr = phraseSprite(phrases[idx]);
+    const angle = (i % (count/arms))*(Math.PI*2/(count/arms));
+    const armA = Math.floor(i/(count/arms))*(Math.PI*2/arms);
+    const dist = Math.pow(i / count, 0.7) * radius;
+    const thick = Math.pow(1 - (dist/radius), 2);
+    const x = Math.cos(angle+armA)*dist;
+    const z = Math.sin(angle+armA)*dist;
+    const y = (Math.random()-0.5)*maxH*thick;
+    spr.position.set(x,y,z);
+    galaxy.add(spr); phraseSprites.push(spr);
+  }
+
+  // ===== Estrellas cercanas =====
+  (function(){
+    const starCount = 9000;
+    const pos = new Float32Array(starCount*3);
+    for (let i=0;i<starCount;i++){
+      const ang=Math.random()*Math.PI*2, dist=Math.random()*radius*1.2;
+      const thick = Math.pow(1 - (Math.min(dist, radius)/radius), 1.5);
+      const y = (Math.random()-0.5)*40*thick;
+      pos[i*3+0]=Math.cos(ang)*dist; pos[i*3+1]=y; pos[i*3+2]=Math.sin(ang)*dist;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+    const mat = new THREE.PointsMaterial({ color:0xffffff, size:0.3, transparent:true, opacity:0.7, blending:THREE.AdditiveBlending });
+    galaxy.add(new THREE.Points(geo, mat));
+  })();
+
+  // ===== Fondo estrellado con titileo =====
+  const bgCount=5000, bgGeo=new THREE.BufferGeometry();
+  const bgPos=new Float32Array(bgCount*3), bgCol=new Float32Array(bgCount*3), twinkle=[];
+  for (let i=0;i<bgCount;i++){
+    const u=Math.random(), v=Math.random();
+    const th=2*Math.PI*u, ph=Math.acos(2*v-1), r=420+Math.random()*120;
+    const x=r*Math.sin(ph)*Math.cos(th), y=r*Math.sin(ph)*Math.sin(th), z=r*Math.cos(ph);
+    bgPos.set([x,y,z], i*3);
+    const c=new THREE.Color(0xffffff); bgCol.set([c.r,c.g,c.b], i*3);
+    twinkle.push({speed:Math.random()*0.5+0.1, offset:Math.random()*10});
+  }
+  bgGeo.setAttribute('position', new THREE.BufferAttribute(bgPos,3));
+  bgGeo.setAttribute('color', new THREE.BufferAttribute(bgCol,3));
+  const bgMat=new THREE.PointsMaterial({ size:0.8, vertexColors:true, blending:THREE.AdditiveBlending, transparent:true, depthWrite:false });
+  const bgStars=new THREE.Points(bgGeo,bgMat); scene.add(bgStars);
+
+  // ===== Nebulosas =====
+  function radialTex(size=512, rgb='150,200,255'){
+    const c=document.createElement('canvas'); c.width=c.height=size; const ctx=c.getContext('2d');
+    const g=ctx.createRadialGradient(size/2,size/2,10, size/2,size/2,size/2);
+    g.addColorStop(0, `rgba(${rgb},0.26)`); g.addColorStop(0.5,`rgba(${rgb},0.12)`); g.addColorStop(1,`rgba(${rgb},0)`);
+    ctx.fillStyle=g; ctx.fillRect(0,0,size,size);
+    return new THREE.CanvasTexture(c);
+  }
+  const nebulas = new THREE.Group(); scene.add(nebulas);
+  (function(){
+    const colors=['150,200,255','255,180,220','180,255,220'];
+    for(let i=0;i<6;i++){
+      const tex=radialTex(512, colors[i%colors.length]);
+      const mat=new THREE.SpriteMaterial({ map:tex, transparent:true, opacity:0.65, depthWrite:false, blending:THREE.AdditiveBlending });
+      const s=new THREE.Sprite(mat);
+      s.scale.set(160,160,1);
+      s.position.set((Math.random()-0.5)*160,(Math.random()-0.5)*40,(Math.random()-0.5)*160);
+      nebulas.add(s);
+    }
+  })();
+
+  // ===== Audio de fondo =====
+  const musicBtn = document.getElementById('music');
+  const music = new Audio("https://cdn.pixabay.com/audio/2022/03/15/audio_2d1a9aa3c1.mp3");
+  music.loop = true; music.volume = 0.35;
+  // intentar reproducir automáticamente
+  window.addEventListener("load", ()=>{ music.play().catch(()=>{}); });
+  musicBtn.textContent="🔈 Música: ON";
+  musicBtn.addEventListener('click', async ()=>{
+    try{
+      if (music.paused){ await music.play(); musicBtn.textContent="🔈 Música: ON"; }
+      else { music.pause(); musicBtn.textContent="🔊 Música"; }
+    }catch{}
+  });
+
+  // ===== Interacción (sin limpiar constelación) =====
+  const ray = new THREE.Raycaster(); const mouse = new THREE.Vector2();
+  const selected = []; let constLine=null;
+
+  function addHalo(pos, base=24, life=600){
+    const tex = radialTex(512, '255,255,200');
+    const mat = new THREE.SpriteMaterial({ map:tex, transparent:true, opacity:0.9, depthWrite:false, blending:THREE.AdditiveBlending });
+    const halo = new THREE.Sprite(mat); halo.position.copy(pos); halo.scale.set(base,base,1);
+    scene.add(halo); const t0=performance.now();
+    (function anim(){
+      const t=performance.now()-t0, k=Math.min(1,t/life);
+      halo.material.opacity=0.9*(1-k); halo.scale.setScalar(base*(1+0.6*k));
+      if (k<1) requestAnimationFrame(anim); else scene.remove(halo);
+    })();
+  }
+
+  function supernova(pos, n=160, life=900){
+    const g=new THREE.BufferGeometry();
+    const P=new Float32Array(n*3), V=new Float32Array(n*3);
+    for(let i=0;i<n;i++){
+      const dir=new THREE.Vector3(Math.random()*2-1,Math.random()*2-1,Math.random()*2-1).normalize();
+      const sp=10+Math.random()*26; V.set([dir.x*sp,dir.y*sp,dir.z*sp], i*3);
+      P.set([pos.x,pos.y,pos.z], i*3);
+    }
+    g.setAttribute('position', new THREE.BufferAttribute(P,3));
+    const m=new THREE.PointsMaterial({ size:0.9, color:0xffffaa, transparent:true, opacity:1, blending:THREE.AdditiveBlending });
+    const pts=new THREE.Points(g,m); scene.add(pts); const t0=performance.now();
+    (function run(){
+      const t=performance.now()-t0, dt=16/1000, arr=pts.geometry.attributes.position.array;
+      for(let i=0;i<n;i++){ arr[i*3]+=V[i*3]*dt; arr[i*3+1]+=V[i*3+1]*dt; arr[i*3+2]+=V[i*3+2]*dt; }
+      pts.geometry.attributes.position.needsUpdate=true; pts.material.opacity=Math.max(0,1-t/life);
+      if (t<life) requestAnimationFrame(run); else scene.remove(pts);
+    })();
+  }
+
+  function pulsePhrase(spr){
+    const base=spr.scale.x; let k=0, dir=1;
+    (function step(){
+      k+=dir*0.06;
+      spr.scale.set(base*(1+k*0.25), 2.5*(1+k*0.25), 1);
+      spr.material.opacity=0.85+0.5*Math.max(0,k);
+      if (k>=1) dir=-1;
+      if (k<=0 && dir<0){ spr.scale.set(base,2.5,1); spr.material.opacity=0.85; return; }
+      requestAnimationFrame(step);
+    })();
+  }
+
+  function updateConstellation(){
+    if (constLine){ scene.remove(constLine); constLine.geometry.dispose(); constLine.material.dispose(); constLine=null; }
+    if (selected.length<2) return;
+    const pts = selected.map(s=>s.position.clone());
+    const geo = new THREE.BufferGeometry().setFromPoints(pts);
+    const mat = new THREE.LineBasicMaterial({ color:0x80d0ff, transparent:true, opacity:0.9 });
+    constLine = new THREE.Line(geo, mat); scene.add(constLine);
+  }
+
+  addEventListener('click', e=>{
+    mouse.x=(e.clientX/innerWidth)*2-1; mouse.y=-(e.clientY/innerHeight)*2+1;
+    ray.setFromCamera(mouse, camera);
+    const hits = ray.intersectObjects(galaxy.children, true).filter(h=>h.object.isPhrase);
+    if (hits.length){
+      const spr=hits[0].object; pulsePhrase(spr); addHalo(spr.position);
+      if (!selected.includes(spr)){ selected.push(spr); if (selected.length>6) selected.shift(); updateConstellation(); }
+    } else {
+      const text = phrases[Math.floor(Math.random()*phrases.length)];
+      const spr = phraseSprite(text);
+      const forward = new THREE.Vector3().subVectors(controls.target, camera.position).normalize();
+      spr.position.copy(camera.position).add(forward.multiplyScalar(30+Math.random()*20));
+      spr.position.add(new THREE.Vector3((Math.random()-0.5)*6,(Math.random()-0.5)*4,(Math.random()-0.5)*6));
+      galaxy.add(spr); phraseSprites.push(spr); addHalo(spr.position, 20, 600);
+    }
+  });
+
+  addEventListener('dblclick', e=>{
+    mouse.x=(e.clientX/innerWidth)*2-1; mouse.y=-(e.clientY/innerHeight)*2+1;
+    ray.setFromCamera(mouse, camera);
+    const hit = ray.intersectObjects(galaxy.children, true).find(h=>h.object.isPhrase);
+    if (hit) supernova(hit.object.position);
+  });
+
+  // ===== Viaje automático =====
+  let auto=false; const autoBtn=document.getElementById('auto'); let autoTarget=null; let nextPick=0;
+  autoBtn.addEventListener('click', ()=>{ auto=!auto; autoBtn.textContent = auto? "🛰️ Viaje: ON" : "🛰️ Viaje: OFF"; });
+
+  function pickTarget(){ if (!phraseSprites.length) return null; return phraseSprites[Math.floor(Math.random()*phraseSprites.length)]; }
+
+  // ===== Resize =====
+  function onResize(){
+    const w=innerWidth, h=innerHeight; renderer.setSize(w,h);
+    camera.aspect=w/h; const isMobile=w<h || w<768;
+    camera.fov=isMobile?90:75; camera.updateProjectionMatrix();
+  }
+  addEventListener('resize', onResize); onResize();
+
+  // ===== Loop =====
+  const clock=new THREE.Clock();
+  (function animate(){
+    const t=clock.getElapsedTime();
+    galaxy.rotation.y = t*0.05;
+    nebulas.children.forEach((n,i)=>{ n.rotation.z += 0.0008 + i*0.0001; });
+
+    const tv = new THREE.Vector2(controls.target.x, controls.target.z);
+    if (tv.length()>panLimit){ tv.setLength(panLimit); controls.target.x=tv.x; controls.target.z=tv.y; }
+
+    const cols = bgStars.geometry.attributes.color;
+    for (let i=0;i<bgCount;i++){ const d=twinkle[i]; const b=(Math.sin(t*d.speed+d.offset)+1)/2*0.7+0.3; cols.setXYZ(i,b,b,b); }
+    cols.needsUpdate = true;
+
+    const now=performance.now();
+    if (auto){
+      if (!autoTarget || now>nextPick){ autoTarget=pickTarget(); nextPick=now+4000+Math.random()*3000; if (autoTarget) addHalo(autoTarget.position, 22, 700); }
+      if (autoTarget){
+        const dir = new THREE.Vector3().subVectors(autoTarget.position, camera.position).normalize();
+        const desired = autoTarget.position.clone().add(dir.clone().multiplyScalar(-20)).add(new THREE.Vector3(0,8,0));
+        camera.position.lerp(desired, 0.02);
+        controls.target.lerp(autoTarget.position, 0.04);
+      }
+    }
+
+    controls.update();
+    renderer.render(scene, camera);
+    requestAnimationFrame(animate);
+  })();
+  </script>
+</body>
+</html>
+    </head>
+<body>
+    <audio id="bg-music" loop autoplay>
+        <source src="sentimiento.mp3" type="audio/mpeg">
+        Tu navegador no soporta el elemento de audio.
+    </audio>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const body = document.body;
+            const audio = document.getElementById('bg-music');
+            
+            // Configurar audio
+            audio.volume = 0.4;
+            audio.play().catch(e => console.log("La reproducción automática no está permitida"));
+
+ document.addEventListener('click', function() {
+                audio.play().catch(e => console.log("Audio no pudo reproducirse"));
+            }, { once: true });
+        });
+    </script>
+</body>
+</html>
